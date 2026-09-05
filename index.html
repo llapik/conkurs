@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeCraft Inc. — ИИ в разработке ПО</title>
+<meta name="description" content="Интерактивный электронный образовательный ресурс «ИИ в разработке ПО»: стажировка в ИТ-компании от автодополнения кода до критической проверки результатов ИИ.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💻</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Живой фон: сетка терминала -->
+<div class="bg-grid" aria-hidden="true"></div>
+<canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+<div id="skip-link-wrap"><a href="#view-root" class="skip-link">Перейти к содержимому</a></div>
+
+<!-- ================= HEADER ================= -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+    <div class="brand-text">
+      <strong>CodeCraft Inc.</strong>
+      <span class="brand-sub">отдел стажировок · ИИ-разработка</span>
+    </div>
+  </div>
+
+  <div class="access-widget" role="group" aria-label="Уровень доступа">
+    <div class="access-labels">
+      <span id="access-role-label">Уровень доступа: Стажёр</span>
+      <span id="access-percent-label">0%</span>
+    </div>
+    <div class="access-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="access-bar">
+      <div class="access-bar-fill" id="access-bar-fill"></div>
+    </div>
+  </div>
+
+  <div class="topbar-controls">
+    <div class="a11y-controls" role="group" aria-label="Настройки доступности">
+      <button type="button" class="icon-btn" id="font-dec" aria-label="Уменьшить размер шрифта">A−</button>
+      <button type="button" class="icon-btn" id="font-inc" aria-label="Увеличить размер шрифта">A+</button>
+      <button type="button" class="icon-btn" id="contrast-toggle" aria-pressed="false" aria-label="Переключить высокий контраст">◐</button>
+    </div>
+    <button type="button" class="icon-btn" id="badge-card-btn" aria-haspopup="dialog" aria-label="Открыть карту сотрудника">🪪 Карта</button>
+  </div>
+</header>
+
+<!-- ================= LEVEL NAV ================= -->
+<nav class="level-nav" aria-label="Уровни модуля">
+  <button type="button" class="level-tab" data-level="1" aria-current="page">
+    <span class="level-tab-num">01</span>
+    <span class="level-tab-name">Стажёр</span>
+  </button>
+  <button type="button" class="level-tab" data-level="2">
+    <span class="level-tab-num">02</span>
+    <span class="level-tab-name">Джуниор</span>
+    <span class="lock-icon" aria-hidden="true">🔒</span>
+  </button>
+  <button type="button" class="level-tab" data-level="3">
+    <span class="level-tab-num">03</span>
+    <span class="level-tab-name">Мидл</span>
+    <span class="lock-icon" aria-hidden="true">🔒</span>
+  </button>
+</nav>
+
+<!-- ================= MAIN VIEW ================= -->
+<main id="view-root" tabindex="-1"></main>
+
+<!-- ================= FOOTER: методическое сопровождение ================= -->
+<footer class="methodical">
+  <div class="methodical-inner">
+    <h2>Методическое сопровождение</h2>
+    <div class="methodical-grid">
+      <div class="methodical-card">
+        <h3>Для кого модуль</h3>
+        <p>Обучающиеся по специальности СПО 09.02.11 «Разработка и управление программным обеспечением» (квалификация «программист»), 3–4 курс, в рамках профессиональных компетенций ПК 2.2–2.5 (разработка, интеграция, тестирование и документирование программных модулей).</p>
+      </div>
+      <div class="methodical-card">
+        <h3>Объём и формат</h3>
+        <p>Рекомендуемая длительность — 6 академических часов: по 2 часа на каждый уровень (теория и квиз · разбор кейсов · промпт-инжиниринг и рефлексия). Возможна очная работа в компьютерном классе или самостоятельное прохождение с последующим разбором на занятии.</p>
+      </div>
+      <div class="methodical-card">
+        <h3>Как встроить в МДК</h3>
+        <p>Модуль встраивается в МДК, посвящённый технологиям разработки и инструментальным средам программирования, как практическое занятие по теме «Инструменты автоматизации разработки» или «Обеспечение качества программного обеспечения». Промпты и рефлексия уровня «Мидл» выгружаются студентом в файл и сдаются преподавателю для очной проверки — автоматической оценки они не получают.</p>
+      </div>
+      <div class="methodical-card">
+        <h3>Оценивание</h3>
+        <p>Уровни «Стажёр» и «Джуниор» проверяются автоматически (квиз и юнит-тесты/паттерн-проверка кода прямо в браузере). Уровень «Мидл» — экспертная проверка преподавателем по приложенным рубрикам самооценки и выгруженному файлу с рефлексией.</p>
+      </div>
+    </div>
+    <p class="methodical-note">Все «ответы ИИ» в модуле — заранее подготовленный учебный контент. Модуль не выполняет реальных обращений к ИИ-моделям и не требует интернет-соединения или API-ключей; прогресс сохраняется локально в браузере.</p>
+  </div>
+</footer>
+
+<!-- ================= INTRO MODAL ================= -->
+<div class="modal-overlay" id="intro-overlay" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+  <div class="modal glass">
+    <p class="terminal-prompt">codecraft@onboarding:~$ <span id="intro-typewriter"></span><span class="cursor-blink">▌</span></p>
+    <h1 id="intro-title">Добро пожаловать в CodeCraft Inc.</h1>
+    <p>Ваш первый день стажировки. Вам предстоит пройти путь от новичка, изучающего ИИ-ассистентов кода, до специалиста, который умеет их проверять и направлять. Три уровня допуска, реальные кейсы, никакой воды.</p>
+    <label class="field-label" for="intro-name">Как к вам обращаться в карте сотрудника?</label>
+    <input type="text" id="intro-name" class="text-input" placeholder="Например, Алекс" maxlength="40">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="intro-start-btn">Начать стажировку →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BADGE CARD MODAL ================= -->
+<div class="modal-overlay" id="badge-overlay" role="dialog" aria-modal="true" aria-labelledby="badge-title">
+  <div class="modal glass">
+    <div class="modal-header-row">
+      <h2 id="badge-title">Карта сотрудника</h2>
+      <button type="button" class="icon-btn" id="badge-close-btn" aria-label="Закрыть">✕</button>
+    </div>
+    <div id="employee-card"></div>
+    <div id="badge-list" class="badge-list"></div>
+  </div>
+</div>
+
+<div id="toast-region" aria-live="polite" class="toast-region"></div>
+
+<script src="js/content.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
