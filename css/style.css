@@ -259,8 +259,8 @@ body {
   box-shadow: 0 0 24px color-mix(in srgb, var(--neon-blue) 30%, transparent);
 }
 .btn-primary:hover {
-  filter: brightness(1.12);
-  color: var(--btn-primary-text);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--neon-blue) 55%, black), color-mix(in srgb, var(--neon-violet) 55%, black));
+  color: #ffffff;
   box-shadow: 0 0 32px color-mix(in srgb, var(--neon-blue) 45%, transparent);
 }
 
