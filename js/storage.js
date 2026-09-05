@@ -28,7 +28,8 @@ const DEFAULT_STATE = {
   },
   settings: {
     fontScale: 1,
-    highContrast: false
+    highContrast: false,
+    theme: 'dark'
   }
 };
 
