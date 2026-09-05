@@ -7,9 +7,9 @@
   'use strict';
 
   const BADGES = {
-    intern: { icon: '🪪', name: 'Пропуск стажёра', desc: 'Выдан за успешное прохождение квиза уровня «Стажёр».' },
-    junior: { icon: '🛠️', name: 'Пропуск джуниора', desc: 'Выдан за исправление всех кейсов уровня «Джуниор».' },
-    middle: { icon: '🧠', name: 'Пропуск мидла', desc: 'Выдан за выполнение промпт-заданий и рефлексии уровня «Мидл».' }
+    intern: { icon: 'id-card', name: 'Пропуск стажёра', desc: 'Выдан за успешное прохождение квиза уровня «Стажёр».' },
+    junior: { icon: 'wrench', name: 'Пропуск джуниора', desc: 'Выдан за исправление всех кейсов уровня «Джуниор».' },
+    middle: { icon: 'brain', name: 'Пропуск мидла', desc: 'Выдан за выполнение промпт-заданий и рефлексии уровня «Мидл».' }
   };
   const ROLE_LABELS = { 1: 'Стажёр', 2: 'Джуниор', 3: 'Мидл' };
 
@@ -18,6 +18,10 @@
   const lastCaseResult = {};
 
   /* ---------------- Утилиты ---------------- */
+
+  function icon(name, extraClass) {
+    return `<svg class="icon${extraClass ? ' ' + extraClass : ''}" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
+  }
 
   function escapeHtml(str) {
     return String(str ?? '')
@@ -42,11 +46,11 @@
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
-  function showToast(message) {
+  function showToast(message, iconName) {
     const region = document.getElementById('toast-region');
     const el = document.createElement('div');
     el.className = 'toast';
-    el.textContent = message;
+    el.innerHTML = (iconName ? icon(iconName) : '') + '<span>' + escapeHtml(message) + '</span>';
     region.appendChild(el);
     setTimeout(() => el.remove(), 5200);
   }
@@ -280,7 +284,7 @@
     const cardHtml = `
       <div class="employee-card">
         <div class="employee-card-row">
-          <div class="employee-avatar" aria-hidden="true">🧑‍💻</div>
+          <div class="employee-avatar" aria-hidden="true">${icon('user')}</div>
           <div class="employee-meta">
             <div class="emp-name">${escapeHtml(name)}</div>
             <div class="emp-role">${escapeHtml(ROLE_LABELS[state.accessLevel])} · CodeCraft Inc.</div>
@@ -295,7 +299,7 @@
       const b = BADGES[key];
       const earned = state.badges.includes(key);
       return `<div class="badge-chip ${earned ? 'earned' : ''}" title="${escapeHtml(b.desc)}">
-        <span class="badge-icon" aria-hidden="true">${b.icon}</span>
+        <span class="badge-icon">${icon(b.icon)}</span>
         <span class="badge-name">${escapeHtml(b.name)}</span>
       </div>`;
     }).join('');
@@ -330,7 +334,7 @@
   function renderLevel1() {
     const cardsHtml = CONTENT.level1.cards.map(c => `
       <article class="theory-card glass">
-        <div class="card-icon" role="img" aria-label="иконка карточки">${c.icon}</div>
+        <div class="card-icon-badge">${icon(c.icon)}</div>
         <h3>${escapeHtml(c.title)}</h3>
         <p>${escapeHtml(c.text)}</p>
       </article>
@@ -364,7 +368,7 @@
 
       const feedback = isChecked ? `
         <div class="quiz-feedback ${isCorrect ? 'right' : 'wrong'}">
-          <span aria-hidden="true">${isCorrect ? '✅' : '🧑‍⚖️'}</span>
+          ${icon(isCorrect ? 'check-circle' : 'message')}
           <span>${escapeHtml(isCorrect ? q.feedbackRight : q.feedbackWrong)}</span>
         </div>` : '';
 
@@ -395,10 +399,10 @@
 
     const banner = state.level1.completed ? `
       <div class="level-complete-banner glass">
-        <div style="font-size:2rem">🪪</div>
+        ${icon('id-card', 'icon-lg')}
         <h2>Пропуск стажёра получен!</h2>
         <p>Загляните в карту сотрудника или переходите к практике джуниора.</p>
-        <button type="button" class="btn btn-primary" data-action="goto-level" data-level="2">Перейти на уровень «Джуниор» →</button>
+        <button type="button" class="btn btn-primary" data-action="goto-level" data-level="2">Перейти на уровень «Джуниор» ${icon('chevron-right')}</button>
       </div>` : '';
 
     return `
@@ -467,7 +471,7 @@
       saveState();
       renderCurrentView();
       fireConfetti();
-      showToast('🪪 Пропуск стажёра получен! Открыт доступ к уровню «Джуниор».');
+      showToast('Пропуск стажёра получен! Открыт доступ к уровню «Джуниор».', 'id-card');
     } else {
       saveState();
     }
@@ -492,7 +496,7 @@
       if (result) {
         if (result.error) {
           resultHtml = `<div class="case-result fail">
-            <div class="reviewer-note"><span class="reviewer-avatar" aria-hidden="true">🧑‍⚖️</span><span>${escapeHtml(result.error)}</span></div>
+            <div class="reviewer-note"><span class="reviewer-avatar">${icon('message')}</span><span>${escapeHtml(result.error)}</span></div>
           </div>`;
         } else {
           const itemsHtml = result.items.map(it =>
@@ -500,7 +504,7 @@
           ).join('');
           resultHtml = `<div class="case-result ${result.pass ? 'pass' : 'fail'}">
             <div class="reviewer-note">
-              <span class="reviewer-avatar" aria-hidden="true">${result.pass ? '🎉' : '🧑‍⚖️'}</span>
+              <span class="reviewer-avatar">${icon(result.pass ? 'check-circle' : 'message')}</span>
               <span>${result.pass ? 'Ревьюер доволен: все проверки пройдены.' : 'Ревьюер вернул на доработку — смотрите список проверок ниже.'}</span>
             </div>
             <ul class="test-list">${itemsHtml}</ul>
@@ -519,20 +523,20 @@
             <h3>${escapeHtml(def.title)}</h3>
             <div>
               <span class="case-lang-tag">${escapeHtml(def.lang)}</span>
-              ${cs.solved ? '<span class="case-status solved"> ✓ исправлено</span>' : ''}
+              ${cs.solved ? `<span class="case-status solved">${icon('check-circle')} исправлено</span>` : ''}
             </div>
           </div>
           <p class="case-task-text">${escapeHtml(def.taskText)}</p>
-          <div class="ai-suggestion-label"><span aria-hidden="true">🤖</span> Предложение ИИ-ассистента (можно редактировать):</div>
+          <div class="ai-suggestion-label">${icon('bot')} Предложение ИИ-ассистента (можно редактировать):</div>
           <div class="code-editor-wrap">
             <textarea class="code-editor" id="code-${def.id}" data-case-id="${def.id}"
               spellcheck="false" aria-label="Редактор кода для кейса ${escapeHtml(def.title)}">${escapeHtml(cs.code)}</textarea>
           </div>
           <div class="case-actions">
-            <button type="button" class="btn btn-primary" data-action="case-check" data-case-id="${def.id}">▶ Проверить</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="case-reset" data-case-id="${def.id}">↺ Восстановить предложение ИИ</button>
+            <button type="button" class="btn btn-primary" data-action="case-check" data-case-id="${def.id}">${icon('play')} Проверить</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="case-reset" data-case-id="${def.id}">${icon('undo')} Восстановить предложение ИИ</button>
           </div>
-          <details class="hint-details"><summary>💬 Совет ревьюера</summary><p>${escapeHtml(def.hint)}</p></details>
+          <details class="hint-details"><summary>${icon('message')} Совет ревьюера</summary><p>${escapeHtml(def.hint)}</p></details>
           ${resultHtml}
         </article>`;
     }).join('');
@@ -540,10 +544,10 @@
     const solvedCount = Object.values(state.level2.cases).filter(c => c && c.solved).length;
     const banner = state.level2.completed ? `
       <div class="level-complete-banner glass">
-        <div style="font-size:2rem">🛠️</div>
+        ${icon('wrench', 'icon-lg')}
         <h2>Пропуск джуниора получен!</h2>
         <p>Доступ к уровню «Мидл» открыт — там ждёт промпт-инжиниринг.</p>
-        <button type="button" class="btn btn-primary" data-action="goto-level" data-level="3">Перейти на уровень «Мидл» →</button>
+        <button type="button" class="btn btn-primary" data-action="goto-level" data-level="3">Перейти на уровень «Мидл» ${icon('chevron-right')}</button>
       </div>` : '';
 
     return `
@@ -575,7 +579,7 @@
 
     if (result.pass && !wasSolved) {
       if (!prefersReducedMotion()) fireConfetti();
-      showToast('✅ Кейс «' + def.title + '» исправлен!');
+      showToast('Кейс «' + def.title + '» исправлен!', 'check-circle');
       maybeFinishLevel2();
     }
   }
@@ -599,7 +603,7 @@
       saveState();
       renderCurrentView();
       fireConfetti();
-      showToast('🛠️ Пропуск джуниора получен! Открыт доступ к уровню «Мидл».');
+      showToast('Пропуск джуниора получен! Открыт доступ к уровню «Мидл».', 'wrench');
     }
   }
 
@@ -645,7 +649,7 @@
 
     const banner = state.level3.submitted ? `
       <div class="level-complete-banner glass">
-        <div style="font-size:2rem">🧠</div>
+        ${icon('brain', 'icon-lg')}
         <h2>Пропуск мидла получен!</h2>
         <p>Файл с ответами выгружен — передайте его преподавателю для экспертной проверки.</p>
       </div>` : '';
@@ -661,7 +665,7 @@
       <div class="reflection-card glass">${reflectionHtml}</div>
 
       <div class="export-bar">
-        <button type="button" class="btn btn-primary" data-action="export-level3" ${readyToSubmit ? '' : 'disabled'}>⇩ Скачать ответ для преподавателя</button>
+        <button type="button" class="btn btn-primary" data-action="export-level3" ${readyToSubmit ? '' : 'disabled'}>${icon('download')} Скачать ответ для преподавателя</button>
         <span class="export-status">${readyToSubmit ? 'Все поля заполнены — можно выгружать.' : `Заполнено ${filledCount} из ${requiredFields.length} полей (минимум 10 символов в каждом).`}</span>
       </div>
       ${banner}
@@ -746,7 +750,7 @@
       saveState();
       renderCurrentView();
       fireConfetti();
-      showToast('🧠 Пропуск мидла получен! Файл для преподавателя выгружен.');
+      showToast('Пропуск мидла получен! Файл для преподавателя выгружен.', 'brain');
     } else {
       saveState();
     }
@@ -778,6 +782,13 @@
     document.documentElement.style.setProperty('--font-scale', state.settings.fontScale);
     document.documentElement.dataset.contrast = state.settings.highContrast ? 'high' : 'normal';
     document.getElementById('contrast-toggle').setAttribute('aria-pressed', String(state.settings.highContrast));
+
+    const isLight = state.settings.theme === 'light';
+    document.documentElement.dataset.theme = state.settings.theme;
+    const themeBtn = document.getElementById('theme-toggle');
+    themeBtn.setAttribute('aria-pressed', String(isLight));
+    themeBtn.setAttribute('aria-label', isLight ? 'Переключить на тёмную тему' : 'Переключить на светлую тему');
+    themeBtn.innerHTML = icon(isLight ? 'sun' : 'moon');
   }
 
   function initHeaderControls() {
@@ -791,6 +802,10 @@
     });
     document.getElementById('contrast-toggle').addEventListener('click', () => {
       state.settings.highContrast = !state.settings.highContrast;
+      saveState(); applySettings();
+    });
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light';
       saveState(); applySettings();
     });
     document.getElementById('badge-card-btn').addEventListener('click', () => openModal('badge-overlay'));
