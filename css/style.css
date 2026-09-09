@@ -338,12 +338,17 @@ textarea.text-input { resize: vertical; min-height: 90px; }
 .brand-mark {
   font-family: var(--font-mono);
   font-weight: 700;
+  font-size: 1rem;
   color: var(--neon-mint);
   background: color-mix(in srgb, var(--neon-mint) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--neon-mint) 35%, transparent);
   padding: 0.3em 0.5em;
   border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
+.brand-mark:hover { background: color-mix(in srgb, var(--neon-mint) 22%, transparent); }
+.brand-mark:focus-visible { outline: 2px solid var(--neon-mint); outline-offset: 2px; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
 .brand-text strong { font-size: 1.05rem; letter-spacing: 0.02em; }
 .brand-sub { font-size: 0.72rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -417,6 +422,36 @@ textarea.text-input { resize: vertical; min-height: 90px; }
 }
 .view-header h1 { margin: 0.2rem 0 0.3rem; font-size: 1.9rem; }
 .view-header p { color: var(--text-dim); max-width: 70ch; margin: 0; }
+
+/* Hub: выбор отдела */
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.2rem;
+}
+.hub-card {
+  padding: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hub-card:hover { transform: translateY(-3px); box-shadow: 0 0 28px color-mix(in srgb, var(--neon-blue) 22%, transparent); }
+.hub-card-icon { width: 52px; height: 52px; border-radius: 14px; margin-bottom: 0.2rem; }
+.hub-card-icon .icon { width: 26px; height: 26px; }
+.hub-card-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--neon-violet);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.hub-card h3 { margin: 0.1rem 0 0.2rem; font-size: 1.25rem; }
+.hub-card p { margin: 0 0 0.4rem; color: var(--text-dim); font-size: 0.92rem; flex-grow: 1; }
+.hub-card-progress { margin-bottom: 0.6rem; }
+.hub-card-progress .access-bar { margin-bottom: 0.4rem; }
+.hub-card-progress-label { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-faint); }
+.hub-card .btn { align-self: flex-start; }
 
 /* Theory cards */
 .card-grid {
@@ -610,6 +645,15 @@ details.hint-details summary:hover { color: var(--neon-mint); }
 }
 .methodical-inner { max-width: 1180px; margin: 0 auto; }
 .methodical h2 { margin-top: 0; }
+.methodical-dept-title {
+  display: flex; align-items: center; gap: 0.5em;
+  font-size: 1.05rem; color: var(--text-main);
+  margin: 2rem 0 0;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--border-glass);
+}
+.methodical-dept-title:first-of-type { margin-top: 1.2rem; padding-top: 0; border-top: none; }
+.methodical-dept-title .icon { color: var(--neon-blue); }
 .methodical-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -676,7 +720,13 @@ details.hint-details summary:hover { color: var(--neon-mint); }
 .employee-meta .emp-role { font-family: var(--font-mono); font-size: 0.78rem; color: var(--neon-blue); }
 .employee-id { margin-left: auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-faint); text-align: right; }
 
-.badge-list { display: flex; gap: 0.8rem; margin-top: 1.2rem; flex-wrap: wrap; }
+.badge-groups { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.2rem; }
+.badge-group-label {
+  display: flex; align-items: center; gap: 0.4em;
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem;
+}
+.badge-list { display: flex; gap: 0.8rem; flex-wrap: wrap; }
 .badge-chip {
   flex: 1 1 140px;
   padding: 0.9em;
