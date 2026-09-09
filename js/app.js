@@ -1,21 +1,33 @@
 /* ============================================================
    CodeCraft Inc. — логика приложения
-   Вся навигация, автопроверка и рендер без сборщика и фреймворка.
+   Платформа с несколькими «отделами» (курсами) на общем движке:
+   стартовый экран-хаб выбирает отдел, дальше — знакомая механика
+   уровней допуска, автопроверки и бейджей, но данные и прогресс
+   у каждого отдела свои (state.courses[courseId]).
    ============================================================ */
 
 (function () {
   'use strict';
 
-  const BADGES = {
-    intern: { icon: 'id-card', name: 'Пропуск стажёра', desc: 'Выдан за успешное прохождение квиза уровня «Стажёр».' },
-    junior: { icon: 'wrench', name: 'Пропуск джуниора', desc: 'Выдан за исправление всех кейсов уровня «Джуниор».' },
-    middle: { icon: 'brain', name: 'Пропуск мидла', desc: 'Выдан за выполнение промпт-заданий и рефлексии уровня «Мидл».' }
+  const BADGE_TIERS = {
+    intern: { icon: 'id-card', name: 'Пропуск стажёра' },
+    junior: { icon: 'wrench', name: 'Пропуск джуниора' },
+    middle: { icon: 'brain', name: 'Пропуск мидла' }
   };
   const ROLE_LABELS = { 1: 'Стажёр', 2: 'Джуниор', 3: 'Мидл' };
 
   let state = Storage.load();
-  let currentView = state.currentLevel || 1;
+  let currentView = state.activeCourseId ? (state.courses[state.activeCourseId].currentLevel || 1) : 'hub';
   const lastCaseResult = {};
+
+  /* ---------------- Доступ к текущему отделу (курсу) ---------------- */
+
+  function course(id) {
+    return COURSES[id || state.activeCourseId];
+  }
+  function courseState(id) {
+    return state.courses[id || state.activeCourseId];
+  }
 
   /* ---------------- Утилиты ---------------- */
 
@@ -37,7 +49,9 @@
   }
 
   function saveState() {
-    state.currentLevel = currentView;
+    if (state.activeCourseId && (currentView === 1 || currentView === 2 || currentView === 3)) {
+      courseState().currentLevel = currentView;
+    }
     Storage.save(state);
     updateHeaderWidgets();
   }
@@ -161,13 +175,40 @@
     return { pass: allPass, items };
   }
 
+  function runA11yMenuCheck(fn) {
+    const items = [];
+    let allPass = true;
+
+    let output;
+    try { output = fn(false); } catch (err) {
+      return { pass: false, error: `Ошибка при выполнении: ${err.message}`, items: [] };
+    }
+    const hasButton = typeof output === 'string' && /<button[\s>]/i.test(output);
+    items.push({ text: 'Используется семантический <button>, а не <div>', pass: hasButton,
+      detail: hasButton ? '' : 'в разметке нет тега <button> — интерактивный элемент должен быть кнопкой, чтобы получать фокус клавиатурой' });
+    if (!hasButton) allPass = false;
+
+    const hasAriaExpanded = typeof output === 'string' && /aria-expanded\s*=/i.test(output);
+    items.push({ text: 'Состояние меню (открыто/закрыто) доступно через aria-expanded', pass: hasAriaExpanded,
+      detail: hasAriaExpanded ? '' : 'добавьте атрибут aria-expanded="true|false", чтобы скринридер знал текущее состояние меню' });
+    if (!hasAriaExpanded) allPass = false;
+
+    return { pass: allPass, items };
+  }
+
   function runPatternChecks(caseDef, code) {
     const items = [];
     let allPass = true;
     caseDef.patternChecks.forEach(check => {
       let pass;
-      if (check.mustMatch) pass = check.mustMatch.test(code);
-      else pass = !check.mustNotMatch.test(code);
+      if (typeof check.minCount === 'number') {
+        const matches = code.match(check.regex);
+        pass = (matches ? matches.length : 0) >= check.minCount;
+      } else if (check.mustMatch) {
+        pass = check.mustMatch.test(code);
+      } else {
+        pass = !check.mustNotMatch.test(code);
+      }
       if (!pass) allPass = false;
       items.push({ text: check.label, pass, detail: pass ? '' : check.message });
     });
@@ -190,13 +231,12 @@
     }
 
     if (caseDef.checkType === 'js-test-xss') {
-      let res;
-      try {
-        res = runXssCheck(fn);
-      } catch (err) {
-        return { pass: false, error: `Ошибка при выполнении: ${err.message}`, items: [] };
-      }
-      return res;
+      try { return runXssCheck(fn); }
+      catch (err) { return { pass: false, error: `Ошибка при выполнении: ${err.message}`, items: [] }; }
+    }
+    if (caseDef.checkType === 'js-test-a11y') {
+      try { return runA11yMenuCheck(fn); }
+      catch (err) { return { pass: false, error: `Ошибка при выполнении: ${err.message}`, items: [] }; }
     }
 
     const items = [];
@@ -208,12 +248,17 @@
       } catch (err) {
         threw = true; message = err.message;
       }
-      const pass = !threw && deepEqual(actual, t.expected);
+      const hasTolerance = typeof t.tolerance === 'number';
+      const pass = !threw && (hasTolerance
+        ? typeof actual === 'number' && Math.abs(actual - t.expected) <= t.tolerance
+        : deepEqual(actual, t.expected));
       if (!pass) allPass = false;
+      const actualStr = typeof actual === 'number' ? Number(actual.toFixed(4)) : JSON.stringify(actual);
+      const expectedStr = (hasTolerance ? '≈' : '') + JSON.stringify(t.expected) + (hasTolerance ? ` (±${t.tolerance})` : '');
       items.push({
         text: t.description,
         pass,
-        detail: threw ? `выброшена ошибка: ${message}` : `получено ${JSON.stringify(actual)}, ожидалось ${JSON.stringify(t.expected)}`
+        detail: threw ? `выброшена ошибка: ${message}` : `получено ${actualStr}, ожидалось ${expectedStr}`
       });
     });
 
@@ -227,90 +272,134 @@
 
   /* ---------------- Прогресс / бейджи / разблокировка ---------------- */
 
-  function unlockLevel(n) {
-    if (state.accessLevel < n) state.accessLevel = n;
+  function unlockLevel(courseId, n) {
+    const cs = courseState(courseId);
+    if (cs.accessLevel < n) cs.accessLevel = n;
   }
 
-  function awardBadge(key) {
-    if (!state.badges.includes(key)) state.badges.push(key);
+  function awardBadge(courseId, key) {
+    const cs = courseState(courseId);
+    if (!cs.badges.includes(key)) cs.badges.push(key);
   }
 
-  function computeProgress() {
-    const l1total = CONTENT.level1.quiz.length;
-    const l1answered = Object.keys(state.level1.checked).length;
-    const l1progress = state.level1.completed ? 34 : Math.round((l1answered / l1total) * 34);
+  function computeCourseProgress(courseId) {
+    const def = COURSES[courseId];
+    const cs = state.courses[courseId];
 
-    const l2total = CONTENT.level2.cases.length;
-    const l2solved = Object.values(state.level2.cases).filter(c => c && c.solved).length;
-    const l2progress = state.level2.completed ? 33 : Math.round((l2solved / l2total) * 33);
+    const l1total = def.level1.quiz.length;
+    const l1answered = Object.keys(cs.level1.checked).length;
+    const l1progress = cs.level1.completed ? 34 : Math.round((l1answered / l1total) * 34);
 
-    const requiredFields = ['prompt1', 'prompt2', 'r1', 'r2', 'r3'];
+    const l2total = def.level2.cases.length;
+    const l2solved = Object.values(cs.level2.cases).filter(c => c && c.solved).length;
+    const l2progress = cs.level2.completed ? 33 : Math.round((l2solved / l2total) * 33);
+
+    const requiredFields = [def.level3.prompts[0].id, def.level3.prompts[1].id, ...def.level3.reflection.questions.map(q => q.id)];
     let filled = 0;
     requiredFields.forEach(id => {
-      const val = (state.level3.prompts[id] || state.level3.reflection[id] || '').trim();
+      const val = (cs.level3.prompts[id] || cs.level3.reflection[id] || '').trim();
       if (val.length >= 10) filled += 1;
     });
-    const l3progress = state.level3.submitted ? 33 : Math.round((filled / requiredFields.length) * 33);
+    const l3progress = cs.level3.submitted ? 33 : Math.round((filled / requiredFields.length) * 33);
 
     return Math.min(100, l1progress + l2progress + l3progress);
   }
 
   function updateHeaderWidgets() {
-    const percent = computeProgress();
-    document.getElementById('access-percent-label').textContent = percent + '%';
-    document.getElementById('access-role-label').textContent = 'Уровень доступа: ' + ROLE_LABELS[state.accessLevel];
-    const fill = document.getElementById('access-bar-fill');
-    fill.style.width = percent + '%';
-    document.getElementById('access-bar').setAttribute('aria-valuenow', String(percent));
+    const isHub = currentView === 'hub';
+    document.getElementById('level-nav').style.display = isHub ? 'none' : '';
+    document.getElementById('access-widget').style.display = isHub ? 'none' : '';
+    document.getElementById('brand-dept').textContent = isHub ? 'выбор отдела' : course().meta.dept;
 
-    document.querySelectorAll('.level-tab').forEach(tab => {
-      const lvl = Number(tab.dataset.level);
-      const locked = lvl > state.accessLevel;
-      tab.disabled = locked;
-      const lockIcon = tab.querySelector('.lock-icon');
-      if (lockIcon) lockIcon.style.display = locked ? '' : 'none';
-      tab.setAttribute('aria-current', lvl === currentView ? 'page' : 'false');
-      tab.classList.toggle('is-complete',
-        (lvl === 1 && state.level1.completed) ||
-        (lvl === 2 && state.level2.completed) ||
-        (lvl === 3 && state.level3.submitted));
-    });
+    if (!isHub) {
+      const cs = courseState();
+      const percent = computeCourseProgress(state.activeCourseId);
+      document.getElementById('access-percent-label').textContent = percent + '%';
+      document.getElementById('access-role-label').textContent = 'Уровень доступа: ' + ROLE_LABELS[cs.accessLevel];
+      const fill = document.getElementById('access-bar-fill');
+      fill.style.width = percent + '%';
+      document.getElementById('access-bar').setAttribute('aria-valuenow', String(percent));
+
+      document.querySelectorAll('.level-tab').forEach(tab => {
+        const lvl = Number(tab.dataset.level);
+        const locked = lvl > cs.accessLevel;
+        tab.disabled = locked;
+        const lockIcon = tab.querySelector('.lock-icon');
+        if (lockIcon) lockIcon.style.display = locked ? '' : 'none';
+        tab.setAttribute('aria-current', lvl === currentView ? 'page' : 'false');
+        tab.classList.toggle('is-complete',
+          (lvl === 1 && cs.level1.completed) ||
+          (lvl === 2 && cs.level2.completed) ||
+          (lvl === 3 && cs.level3.submitted));
+      });
+    }
 
     renderEmployeeCard();
   }
 
   function renderEmployeeCard() {
     const name = state.name && state.name.trim() ? state.name.trim() : 'Без имени';
+    const roleText = state.activeCourseId ? ROLE_LABELS[courseState().accessLevel] + ' · ' + course().meta.dept : 'ещё не выбрал отдел';
+    const overallPercent = Math.round(COURSE_ORDER.reduce((sum, id) => sum + computeCourseProgress(id), 0) / COURSE_ORDER.length);
     const cardHtml = `
       <div class="employee-card">
         <div class="employee-card-row">
           <div class="employee-avatar" aria-hidden="true">${icon('user')}</div>
           <div class="employee-meta">
             <div class="emp-name">${escapeHtml(name)}</div>
-            <div class="emp-role">${escapeHtml(ROLE_LABELS[state.accessLevel])} · CodeCraft Inc.</div>
+            <div class="emp-role">${escapeHtml(roleText)}</div>
           </div>
-          <div class="employee-id">ID: CC-${(name.length * 17 + 1000) % 9000 + 1000}<br>Доступ: ${computeProgress()}%</div>
+          <div class="employee-id">ID: CC-${(name.length * 17 + 1000) % 9000 + 1000}<br>Общий прогресс: ${overallPercent}%</div>
         </div>
       </div>`;
     const container = document.getElementById('employee-card');
     if (container) container.innerHTML = cardHtml;
 
-    const badgeListHtml = Object.keys(BADGES).map(key => {
-      const b = BADGES[key];
-      const earned = state.badges.includes(key);
-      return `<div class="badge-chip ${earned ? 'earned' : ''}" title="${escapeHtml(b.desc)}">
-        <span class="badge-icon">${icon(b.icon)}</span>
-        <span class="badge-name">${escapeHtml(b.name)}</span>
-      </div>`;
+    const badgeListHtml = COURSE_ORDER.map(courseId => {
+      const def = COURSES[courseId];
+      const cs = state.courses[courseId];
+      const chips = Object.keys(BADGE_TIERS).map(tier => {
+        const b = BADGE_TIERS[tier];
+        const earned = cs.badges.includes(tier);
+        return `<div class="badge-chip ${earned ? 'earned' : ''}" title="${escapeHtml(b.name)} — ${escapeHtml(def.meta.dept)}">
+          <span class="badge-icon">${icon(b.icon)}</span>
+          <span class="badge-name">${escapeHtml(b.name)}</span>
+        </div>`;
+      }).join('');
+      return `
+        <div class="badge-group">
+          <div class="badge-group-label">${icon(def.meta.icon)} ${escapeHtml(def.meta.dept)}</div>
+          <div class="badge-list">${chips}</div>
+        </div>`;
     }).join('');
     const badgeList = document.getElementById('badge-list');
     if (badgeList) badgeList.innerHTML = badgeListHtml;
   }
 
-  /* ---------------- Рендер: навигация между уровнями ---------------- */
+  /* ---------------- Навигация: хаб ↔ отделы ↔ уровни ---------------- */
+
+  function goToHub() {
+    currentView = 'hub';
+    saveState();
+    renderCurrentView();
+    const root = document.getElementById('view-root');
+    root.focus({ preventScroll: true });
+    root.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function enterCourse(courseId) {
+    state.activeCourseId = courseId;
+    currentView = courseState().currentLevel || 1;
+    saveState();
+    renderCurrentView();
+    const root = document.getElementById('view-root');
+    root.focus({ preventScroll: true });
+    root.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
 
   function goToView(n) {
-    if (n > state.accessLevel) return;
+    if (!state.activeCourseId) return;
+    if (n > courseState().accessLevel) return;
     currentView = n;
     saveState();
     renderCurrentView();
@@ -322,17 +411,56 @@
   function renderCurrentView() {
     const scrollY = window.scrollY;
     const root = document.getElementById('view-root');
-    if (currentView === 1) root.innerHTML = renderLevel1();
+    if (currentView === 'hub') root.innerHTML = renderHub();
+    else if (currentView === 1) root.innerHTML = renderLevel1();
     else if (currentView === 2) root.innerHTML = renderLevel2();
     else root.innerHTML = renderLevel3();
     updateHeaderWidgets();
     window.scrollTo(0, scrollY);
   }
 
+  /* ---------------- ХАБ: выбор отдела ---------------- */
+
+  function renderHub() {
+    const cardsHtml = COURSE_ORDER.map(courseId => {
+      const def = COURSES[courseId];
+      const cs = state.courses[courseId];
+      const percent = computeCourseProgress(courseId);
+      const started = percent > 0 || cs.badges.length > 0;
+      const earnedCount = cs.badges.length;
+      return `
+        <article class="hub-card glass">
+          <div class="card-icon-badge hub-card-icon">${icon(def.meta.icon)}</div>
+          <div class="hub-card-eyebrow">${escapeHtml(def.meta.dept)}</div>
+          <h3>${escapeHtml(def.meta.title)}</h3>
+          <p>${escapeHtml(def.meta.tagline)}</p>
+          <div class="hub-card-progress">
+            <div class="access-bar"><div class="access-bar-fill" style="width:${percent}%"></div></div>
+            <span class="hub-card-progress-label">${ROLE_LABELS[cs.accessLevel]} · ${percent}% · бейджей ${earnedCount}/3</span>
+          </div>
+          <button type="button" class="btn btn-primary" data-action="enter-course" data-course-id="${courseId}">
+            ${started ? 'Продолжить стажировку' : 'Начать стажировку'} ${icon('chevron-right')}
+          </button>
+        </article>`;
+    }).join('');
+
+    return `
+      <section class="view-header">
+        <span class="view-eyebrow">CodeCraft Inc.</span>
+        <h1>Выберите отдел стажировки</h1>
+        <p>Один движок, разные дисциплины: уровни допуска, бейджи и авто-проверка работают одинаково — контент разный. Прогресс по каждому отделу сохраняется отдельно.</p>
+      </section>
+      <div class="hub-grid">${cardsHtml}</div>
+    `;
+  }
+
   /* ---------------- УРОВЕНЬ 1 ---------------- */
 
   function renderLevel1() {
-    const cardsHtml = CONTENT.level1.cards.map(c => `
+    const def = course().level1;
+    const cs = courseState().level1;
+
+    const cardsHtml = def.cards.map(c => `
       <article class="theory-card glass">
         <div class="card-icon-badge">${icon(c.icon)}</div>
         <h3>${escapeHtml(c.title)}</h3>
@@ -340,13 +468,13 @@
       </article>
     `).join('');
 
-    const total = CONTENT.level1.quiz.length;
-    const answered = Object.keys(state.level1.checked).length;
+    const total = def.quiz.length;
+    const answered = Object.keys(cs.checked).length;
 
-    const quizHtml = CONTENT.level1.quiz.map((q, qi) => {
-      const isChecked = !!state.level1.checked[q.id];
-      const isCorrect = !!state.level1.correct[q.id];
-      const selected = state.level1.answers[q.id] || [];
+    const quizHtml = def.quiz.map((q, qi) => {
+      const isChecked = !!cs.checked[q.id];
+      const isCorrect = !!cs.correct[q.id];
+      const selected = cs.answers[q.id] || [];
       const inputType = q.type === 'single' ? 'radio' : 'checkbox';
 
       const optionsHtml = q.options.map((opt, oi) => {
@@ -385,19 +513,19 @@
 
     let summaryHtml = '';
     if (answered >= total) {
-      const score = Object.values(state.level1.correct).filter(Boolean).length;
-      const passed = score >= CONTENT.level1.passThreshold;
+      const score = Object.values(cs.correct).filter(Boolean).length;
+      const passed = score >= def.passThreshold;
       summaryHtml = `
         <div class="quiz-summary glass">
           <div class="score-num">${score} / ${total}</div>
           <p>${passed
             ? 'Порог пройден — доступ к уровню «Джуниор» открыт.'
-            : `Нужно набрать минимум ${CONTENT.level1.passThreshold} из ${total}, чтобы получить пропуск стажёра.`}</p>
+            : `Нужно набрать минимум ${def.passThreshold} из ${total}, чтобы получить пропуск стажёра.`}</p>
           ${!passed ? '<button type="button" class="btn btn-ghost" data-action="quiz-retry">Пройти квиз ещё раз</button>' : ''}
         </div>`;
     }
 
-    const banner = state.level1.completed ? `
+    const banner = cs.completed ? `
       <div class="level-complete-banner glass">
         ${icon('id-card', 'icon-lg')}
         <h2>Пропуск стажёра получен!</h2>
@@ -407,15 +535,15 @@
 
     return `
       <section class="view-header">
-        <span class="view-eyebrow">Уровень допуска 01</span>
-        <h1>Стажёр — знакомство с ИИ-ассистентами</h1>
-        <p>${escapeHtml(CONTENT.level1.subtitle)}. Изучите карточки ниже, затем пройдите проверочный квиз — обратная связь приходит сразу после ответа.</p>
+        <span class="view-eyebrow">${escapeHtml(course().meta.dept)} · Уровень допуска 01</span>
+        <h1>Стажёр — ${escapeHtml(def.subtitle)}</h1>
+        <p>Изучите карточки ниже, затем пройдите проверочный квиз — обратная связь приходит сразу после ответа.</p>
       </section>
 
       <div class="card-grid">${cardsHtml}</div>
 
       <div class="section-divider">Проверочный квиз · ${answered}/${total}</div>
-      <p class="quiz-progress">Отвечено вопросов: ${answered} из ${total}. Порог для получения пропуска: ${CONTENT.level1.passThreshold} правильных ответов.</p>
+      <p class="quiz-progress">Отвечено вопросов: ${answered} из ${total}. Порог для получения пропуска: ${def.passThreshold} правильных ответов.</p>
       ${quizHtml}
       ${summaryHtml}
       ${banner}
@@ -423,14 +551,15 @@
   }
 
   function handleQuizSelect(qid, qtype, value) {
+    const cs = courseState().level1;
     const idx = Number(value);
-    if (!state.level1.answers[qid]) state.level1.answers[qid] = [];
+    if (!cs.answers[qid]) cs.answers[qid] = [];
     if (qtype === 'single') {
-      state.level1.answers[qid] = [idx];
+      cs.answers[qid] = [idx];
       saveState();
       checkQuizAnswer(qid);
     } else {
-      const arr = state.level1.answers[qid];
+      const arr = cs.answers[qid];
       const pos = arr.indexOf(idx);
       if (pos >= 0) arr.splice(pos, 1); else arr.push(idx);
       saveState();
@@ -439,35 +568,41 @@
   }
 
   function checkQuizAnswer(qid) {
-    const q = CONTENT.level1.quiz.find(x => x.id === qid);
-    const selected = (state.level1.answers[qid] || []).slice().sort();
+    const def = course().level1;
+    const cs = courseState().level1;
+    const q = def.quiz.find(x => x.id === qid);
+    const selected = (cs.answers[qid] || []).slice().sort();
     const correct = q.correct.slice().sort();
     const isCorrect = deepEqual(selected, correct);
-    state.level1.checked[qid] = true;
-    state.level1.correct[qid] = isCorrect;
+    cs.checked[qid] = true;
+    cs.correct[qid] = isCorrect;
     saveState();
     renderCurrentView();
     maybeFinishLevel1();
   }
 
   function retryQuiz() {
-    state.level1.answers = {};
-    state.level1.checked = {};
-    state.level1.correct = {};
+    const cs = courseState().level1;
+    cs.answers = {};
+    cs.checked = {};
+    cs.correct = {};
     saveState();
     renderCurrentView();
   }
 
   function maybeFinishLevel1() {
-    const total = CONTENT.level1.quiz.length;
-    const answered = Object.keys(state.level1.checked).length;
-    if (answered < total || state.level1.completed) return;
-    const score = Object.values(state.level1.correct).filter(Boolean).length;
-    state.level1.score = score;
-    if (score >= CONTENT.level1.passThreshold) {
-      state.level1.completed = true;
-      unlockLevel(2);
-      awardBadge('intern');
+    const courseId = state.activeCourseId;
+    const def = COURSES[courseId].level1;
+    const cs = state.courses[courseId].level1;
+    const total = def.quiz.length;
+    const answered = Object.keys(cs.checked).length;
+    if (answered < total || cs.completed) return;
+    const score = Object.values(cs.correct).filter(Boolean).length;
+    cs.score = score;
+    if (score >= def.passThreshold) {
+      cs.completed = true;
+      unlockLevel(courseId, 2);
+      awardBadge(courseId, 'intern');
       saveState();
       renderCurrentView();
       fireConfetti();
@@ -479,18 +614,22 @@
 
   /* ---------------- УРОВЕНЬ 2 ---------------- */
 
-  function getCaseState(id) {
-    if (!state.level2.cases[id]) {
-      const def = CONTENT.level2.cases.find(c => c.id === id);
-      state.level2.cases[id] = { solved: false, code: def.code, attempts: 0 };
+  function getCaseState(caseId) {
+    const cs = courseState().level2;
+    if (!cs.cases[caseId]) {
+      const def = course().level2.cases.find(c => c.id === caseId);
+      cs.cases[caseId] = { solved: false, code: def.code, attempts: 0 };
     }
-    return state.level2.cases[id];
+    return cs.cases[caseId];
   }
 
   function renderLevel2() {
-    const casesHtml = CONTENT.level2.cases.map(def => {
-      const cs = getCaseState(def.id);
-      const result = lastCaseResult[def.id];
+    const def = course().level2;
+    const cs = courseState().level2;
+
+    const casesHtml = def.cases.map(caseDef => {
+      const cState = getCaseState(caseDef.id);
+      const result = lastCaseResult[caseDef.id];
 
       let resultHtml = '';
       if (result) {
@@ -510,52 +649,52 @@
             <ul class="test-list">${itemsHtml}</ul>
             ${result.pass ? `<div class="explanation-box">
               <strong>Что было не так:</strong>
-              <p>${escapeHtml(def.explanation)}</p>
-              <pre class="code-editor" style="min-height:auto;border-radius:8px;">${escapeHtml(def.solutionExample)}</pre>
+              <p>${escapeHtml(caseDef.explanation)}</p>
+              <pre class="code-editor" style="min-height:auto;border-radius:8px;">${escapeHtml(caseDef.solutionExample)}</pre>
             </div>` : ''}
           </div>`;
         }
       }
 
       return `
-        <article class="case-card glass" data-case-id="${def.id}">
+        <article class="case-card glass" data-case-id="${caseDef.id}">
           <div class="case-card-head">
-            <h3>${escapeHtml(def.title)}</h3>
+            <h3>${escapeHtml(caseDef.title)}</h3>
             <div>
-              <span class="case-lang-tag">${escapeHtml(def.lang)}</span>
-              ${cs.solved ? `<span class="case-status solved">${icon('check-circle')} исправлено</span>` : ''}
+              <span class="case-lang-tag">${escapeHtml(caseDef.lang)}</span>
+              ${cState.solved ? `<span class="case-status solved">${icon('check-circle')} исправлено</span>` : ''}
             </div>
           </div>
-          <p class="case-task-text">${escapeHtml(def.taskText)}</p>
+          <p class="case-task-text">${escapeHtml(caseDef.taskText)}</p>
           <div class="ai-suggestion-label">${icon('bot')} Предложение ИИ-ассистента (можно редактировать):</div>
           <div class="code-editor-wrap">
-            <textarea class="code-editor" id="code-${def.id}" data-case-id="${def.id}"
-              spellcheck="false" aria-label="Редактор кода для кейса ${escapeHtml(def.title)}">${escapeHtml(cs.code)}</textarea>
+            <textarea class="code-editor" id="code-${caseDef.id}" data-case-id="${caseDef.id}"
+              spellcheck="false" aria-label="Редактор кода для кейса ${escapeHtml(caseDef.title)}">${escapeHtml(cState.code)}</textarea>
           </div>
           <div class="case-actions">
-            <button type="button" class="btn btn-primary" data-action="case-check" data-case-id="${def.id}">${icon('play')} Проверить</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="case-reset" data-case-id="${def.id}">${icon('undo')} Восстановить предложение ИИ</button>
+            <button type="button" class="btn btn-primary" data-action="case-check" data-case-id="${caseDef.id}">${icon('play')} Проверить</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="case-reset" data-case-id="${caseDef.id}">${icon('undo')} Восстановить предложение ИИ</button>
           </div>
-          <details class="hint-details"><summary>${icon('message')} Совет ревьюера</summary><p>${escapeHtml(def.hint)}</p></details>
+          <details class="hint-details"><summary>${icon('message')} Совет ревьюера</summary><p>${escapeHtml(caseDef.hint)}</p></details>
           ${resultHtml}
         </article>`;
     }).join('');
 
-    const solvedCount = Object.values(state.level2.cases).filter(c => c && c.solved).length;
-    const banner = state.level2.completed ? `
+    const solvedCount = Object.values(cs.cases).filter(c => c && c.solved).length;
+    const banner = cs.completed ? `
       <div class="level-complete-banner glass">
         ${icon('wrench', 'icon-lg')}
         <h2>Пропуск джуниора получен!</h2>
-        <p>Доступ к уровню «Мидл» открыт — там ждёт промпт-инжиниринг.</p>
+        <p>Доступ к уровню «Мидл» открыт.</p>
         <button type="button" class="btn btn-primary" data-action="goto-level" data-level="3">Перейти на уровень «Мидл» ${icon('chevron-right')}</button>
       </div>` : '';
 
     return `
       <section class="view-header">
-        <span class="view-eyebrow">Уровень допуска 02</span>
-        <h1>Джуниор — найдите, что не так в коде ИИ</h1>
-        <p>${escapeHtml(CONTENT.level2.subtitle)}. В каждом кейсе — код, который якобы предложил ИИ-ассистент. Найдите баг, уязвимость или неоптимальность, исправьте прямо в редакторе и нажмите «Проверить».</p>
-        <p class="quiz-progress">Исправлено кейсов: ${solvedCount} из ${CONTENT.level2.cases.length}</p>
+        <span class="view-eyebrow">${escapeHtml(course().meta.dept)} · Уровень допуска 02</span>
+        <h1>Джуниор — найдите, что не так</h1>
+        <p>${escapeHtml(def.subtitle)}. В каждом кейсе — код, который якобы предложил ИИ-ассистент. Найдите баг, уязвимость или неоптимальность, исправьте прямо в редакторе и нажмите «Проверить».</p>
+        <p class="quiz-progress">Исправлено кейсов: ${solvedCount} из ${def.cases.length}</p>
       </section>
       ${casesHtml}
       ${banner}
@@ -563,17 +702,17 @@
   }
 
   function handleCaseCheck(caseId) {
-    const def = CONTENT.level2.cases.find(c => c.id === caseId);
+    const def = course().level2.cases.find(c => c.id === caseId);
     const textarea = document.getElementById('code-' + caseId);
     const code = textarea ? textarea.value : getCaseState(caseId).code;
-    const cs = getCaseState(caseId);
-    cs.code = code;
-    cs.attempts += 1;
+    const cState = getCaseState(caseId);
+    cState.code = code;
+    cState.attempts += 1;
 
     const result = runCaseCheck(def, code);
     lastCaseResult[caseId] = result;
-    const wasSolved = cs.solved;
-    if (result.pass) cs.solved = true;
+    const wasSolved = cState.solved;
+    if (result.pass) cState.solved = true;
     saveState();
     renderCurrentView();
 
@@ -585,21 +724,24 @@
   }
 
   function handleCaseReset(caseId) {
-    const def = CONTENT.level2.cases.find(c => c.id === caseId);
-    state.level2.cases[caseId] = { solved: getCaseState(caseId).solved, code: def.code, attempts: getCaseState(caseId).attempts };
+    const def = course().level2.cases.find(c => c.id === caseId);
+    const prev = getCaseState(caseId);
+    courseState().level2.cases[caseId] = { solved: prev.solved, code: def.code, attempts: prev.attempts };
     delete lastCaseResult[caseId];
     saveState();
     renderCurrentView();
   }
 
   function maybeFinishLevel2() {
-    if (state.level2.completed) return;
-    const total = CONTENT.level2.cases.length;
-    const solved = Object.values(state.level2.cases).filter(c => c && c.solved).length;
+    const courseId = state.activeCourseId;
+    const cs = state.courses[courseId].level2;
+    if (cs.completed) return;
+    const total = COURSES[courseId].level2.cases.length;
+    const solved = Object.values(cs.cases).filter(c => c && c.solved).length;
     if (solved >= total) {
-      state.level2.completed = true;
-      unlockLevel(3);
-      awardBadge('junior');
+      cs.completed = true;
+      unlockLevel(courseId, 3);
+      awardBadge(courseId, 'junior');
       saveState();
       renderCurrentView();
       fireConfetti();
@@ -609,10 +751,18 @@
 
   /* ---------------- УРОВЕНЬ 3 ---------------- */
 
+  function level3RequiredFields() {
+    const def = course().level3;
+    return [def.prompts[0].id, def.prompts[1].id, ...def.reflection.questions.map(q => q.id)];
+  }
+
   function renderLevel3() {
-    const promptsHtml = CONTENT.level3.prompts.map(p => {
-      const value = state.level3.prompts[p.id] || '';
-      const rubricState = state.level3.prompts['_rubric_' + p.id] || {};
+    const def = course().level3;
+    const cs = courseState().level3;
+
+    const promptsHtml = def.prompts.map(p => {
+      const value = cs.prompts[p.id] || '';
+      const rubricState = cs.prompts['_rubric_' + p.id] || {};
       const rubricHtml = p.rubric.map((r, ri) => `
         <li class="${rubricState[ri] ? 'checked' : ''}">
           <input type="checkbox" data-action="rubric-toggle" data-prompt-id="${p.id}" data-rubric-idx="${ri}" ${rubricState[ri] ? 'checked' : ''} id="rubric-${p.id}-${ri}">
@@ -631,8 +781,8 @@
         </article>`;
     }).join('');
 
-    const reflectionHtml = CONTENT.level3.reflection.questions.map(q => {
-      const value = state.level3.reflection[q.id] || '';
+    const reflectionHtml = def.reflection.questions.map(q => {
+      const value = cs.reflection[q.id] || '';
       return `
         <div class="reflection-q">
           <label for="refl-${q.id}">${escapeHtml(q.label)}</label>
@@ -640,14 +790,14 @@
         </div>`;
     }).join('');
 
-    const requiredFields = ['prompt1', 'prompt2', 'r1', 'r2', 'r3'];
+    const requiredFields = level3RequiredFields();
     const filledCount = requiredFields.filter(id => {
-      const val = (state.level3.prompts[id] || state.level3.reflection[id] || '').trim();
+      const val = (cs.prompts[id] || cs.reflection[id] || '').trim();
       return val.length >= 10;
     }).length;
     const readyToSubmit = filledCount === requiredFields.length;
 
-    const banner = state.level3.submitted ? `
+    const banner = cs.submitted ? `
       <div class="level-complete-banner glass">
         ${icon('brain', 'icon-lg')}
         <h2>Пропуск мидла получен!</h2>
@@ -656,12 +806,12 @@
 
     return `
       <section class="view-header">
-        <span class="view-eyebrow">Уровень допуска 03</span>
-        <h1>Мидл — промпт-инжиниринг и критическое мышление</h1>
-        <p>${escapeHtml(CONTENT.level3.subtitle)}. Здесь нет автоматической проверки «правильно/неправильно» — задания оценивает преподаватель. Заполните оба промпта и рефлексию, затем выгрузите файл для сдачи.</p>
+        <span class="view-eyebrow">${escapeHtml(course().meta.dept)} · Уровень допуска 03</span>
+        <h1>Мидл — ${escapeHtml(def.subtitle)}</h1>
+        <p>Здесь нет автоматической проверки «правильно/неправильно» — задания оценивает преподаватель. Заполните оба промпта и рефлексию, затем выгрузите файл для сдачи.</p>
       </section>
       ${promptsHtml}
-      <div class="section-divider">${escapeHtml(CONTENT.level3.reflection.title)}</div>
+      <div class="section-divider">${escapeHtml(def.reflection.title)}</div>
       <div class="reflection-card glass">${reflectionHtml}</div>
 
       <div class="export-bar">
@@ -673,9 +823,10 @@
   }
 
   function updateLevel3ExportStatus() {
-    const requiredFields = ['prompt1', 'prompt2', 'r1', 'r2', 'r3'];
+    const cs = courseState().level3;
+    const requiredFields = level3RequiredFields();
     const filledCount = requiredFields.filter(id => {
-      const val = (state.level3.prompts[id] || state.level3.reflection[id] || '').trim();
+      const val = (cs.prompts[id] || cs.reflection[id] || '').trim();
       return val.length >= 10;
     }).length;
     const readyToSubmit = filledCount === requiredFields.length;
@@ -688,65 +839,69 @@
   }
 
   function handlePromptInput(promptId, value) {
-    state.level3.prompts[promptId] = value;
+    courseState().level3.prompts[promptId] = value;
     saveState();
     updateLevel3ExportStatus();
   }
 
   function handleReflectionInput(reflId, value) {
-    state.level3.reflection[reflId] = value;
+    courseState().level3.reflection[reflId] = value;
     saveState();
     updateLevel3ExportStatus();
   }
 
   function handleRubricToggle(promptId, idx) {
+    const prompts = courseState().level3.prompts;
     const key = '_rubric_' + promptId;
-    if (!state.level3.prompts[key]) state.level3.prompts[key] = {};
-    state.level3.prompts[key][idx] = !state.level3.prompts[key][idx];
+    if (!prompts[key]) prompts[key] = {};
+    prompts[key][idx] = !prompts[key][idx];
     saveState();
     renderCurrentView();
   }
 
   function handleExportLevel3() {
+    const def = course().level3;
+    const cs = courseState();
     const name = state.name && state.name.trim() ? state.name.trim() : 'Без имени';
     const lines = [];
-    lines.push('CodeCraft Inc. — отчёт стажёра по модулю «ИИ в разработке ПО»');
+    lines.push('CodeCraft Inc. — отчёт стажёра');
+    lines.push('Отдел: ' + course().meta.dept + ' (' + course().meta.title + ')');
     lines.push('Студент: ' + name);
     lines.push('Дата: ' + new Date().toLocaleString('ru-RU'));
     lines.push('');
     lines.push('=== Уровень 1. Стажёр ===');
-    lines.push('Результат квиза: ' + state.level1.score + ' / ' + CONTENT.level1.quiz.length);
+    lines.push('Результат квиза: ' + cs.level1.score + ' / ' + course().level1.quiz.length);
     lines.push('');
     lines.push('=== Уровень 2. Джуниор ===');
-    CONTENT.level2.cases.forEach(def => {
-      const cs = getCaseState(def.id);
-      lines.push('- ' + def.title + ': ' + (cs.solved ? 'исправлено' : 'не исправлено') + ' (попыток: ' + cs.attempts + ')');
+    course().level2.cases.forEach(caseDef => {
+      const cState = getCaseState(caseDef.id);
+      lines.push('- ' + caseDef.title + ': ' + (cState.solved ? 'исправлено' : 'не исправлено') + ' (попыток: ' + cState.attempts + ')');
     });
     lines.push('');
     lines.push('=== Уровень 3. Мидл — промпт-инжиниринг ===');
-    CONTENT.level3.prompts.forEach(p => {
+    def.prompts.forEach(p => {
       lines.push('--- ' + p.title + ' ---');
-      lines.push(state.level3.prompts[p.id] || '(пусто)');
-      const rubricState = state.level3.prompts['_rubric_' + p.id] || {};
+      lines.push(cs.level3.prompts[p.id] || '(пусто)');
+      const rubricState = cs.level3.prompts['_rubric_' + p.id] || {};
       lines.push('Самопроверка по рубрике:');
       p.rubric.forEach((r, ri) => {
         lines.push('  [' + (rubricState[ri] ? 'x' : ' ') + '] ' + r);
       });
       lines.push('');
     });
-    lines.push('=== Рефлексия: где ИИ мог ошибиться и почему ===');
-    CONTENT.level3.reflection.questions.forEach(q => {
+    lines.push('=== ' + def.reflection.title + ' ===');
+    def.reflection.questions.forEach(q => {
       lines.push('Вопрос: ' + q.label);
-      lines.push('Ответ: ' + (state.level3.reflection[q.id] || '(пусто)'));
+      lines.push('Ответ: ' + (cs.level3.reflection[q.id] || '(пусто)'));
       lines.push('');
     });
 
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadTextFile('codecraft-report-' + stamp + '.txt', lines.join('\n'));
+    downloadTextFile('codecraft-' + course().meta.id + '-report-' + stamp + '.txt', lines.join('\n'));
 
-    if (!state.level3.submitted) {
-      state.level3.submitted = true;
-      awardBadge('middle');
+    if (!cs.level3.submitted) {
+      cs.level3.submitted = true;
+      awardBadge(state.activeCourseId, 'middle');
       saveState();
       renderCurrentView();
       fireConfetti();
@@ -816,6 +971,8 @@
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') closeModal('badge-overlay');
     });
+    document.getElementById('hub-nav-btn').addEventListener('click', goToHub);
+    document.getElementById('brand-mark-btn').addEventListener('click', goToHub);
 
     document.querySelectorAll('.level-tab').forEach(tab => {
       tab.addEventListener('click', () => goToView(Number(tab.dataset.level)));
@@ -837,7 +994,7 @@
     const introSeen = sessionStorage.getItem('codecraft.introSeen');
     if (!introSeen) {
       openModal('intro-overlay');
-      typeWriter(document.getElementById('intro-typewriter'), 'инициализация стажировки… доступ выдан.', 35);
+      typeWriter(document.getElementById('intro-typewriter'), 'инициализация пропуска… доступ в бизнес-центр выдан.', 35);
     }
 
     document.getElementById('intro-start-btn').addEventListener('click', () => {
@@ -856,7 +1013,8 @@
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
-      if (action === 'quiz-check') checkQuizAnswer(btn.dataset.qid);
+      if (action === 'enter-course') enterCourse(btn.dataset.courseId);
+      else if (action === 'quiz-check') checkQuizAnswer(btn.dataset.qid);
       else if (action === 'quiz-retry') retryQuiz();
       else if (action === 'goto-level') goToView(Number(btn.dataset.level));
       else if (action === 'case-check') handleCaseCheck(btn.dataset.caseId);
