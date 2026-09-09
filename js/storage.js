@@ -41,7 +41,8 @@ function defaultState() {
     settings: {
       fontScale: 1,
       highContrast: false,
-      theme: 'dark'
+      theme: 'dark',
+      motion: true
     }
   };
 }

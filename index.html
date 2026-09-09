@@ -6,9 +6,15 @@
 <title>CodeCraft Inc. — стажировка в ИТ-компании</title>
 <meta name="description" content="Интерактивная платформа-стажировка CodeCraft Inc.: несколько отделов (ИИ в разработке ПО, UX/UI-разработка) с уровнями допуска, авто-проверкой и бейджами.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%230a0e16%22/><text x=%2216%22 y=%2221%22 font-family=%22monospace%22 font-weight=%22bold%22 font-size=%2213%22 fill=%22%2348ffc0%22 text-anchor=%22middle%22>&lt;/&gt;</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Manrope:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+<!-- Полоса прогресса прокрутки -->
+<div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
 
 <!-- ================= ИКОНКИ (спрайт) ================= -->
 <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -77,6 +83,7 @@
     <div class="a11y-controls" role="group" aria-label="Настройки доступности">
       <button type="button" class="icon-btn" id="font-dec" aria-label="Уменьшить размер шрифта">A−</button>
       <button type="button" class="icon-btn" id="font-inc" aria-label="Увеличить размер шрифта">A+</button>
+      <button type="button" class="icon-btn" id="motion-toggle" aria-pressed="false" aria-label="Уменьшить анимацию">≈</button>
       <button type="button" class="icon-btn" id="contrast-toggle" aria-pressed="false" aria-label="Переключить высокий контраст"><svg class="icon" aria-hidden="true"><use href="#icon-contrast"></use></svg></button>
       <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Переключить светлую тему"><svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg></button>
     </div>
@@ -107,7 +114,7 @@
 <main id="view-root" tabindex="-1"></main>
 
 <!-- ================= FOOTER: методическое сопровождение ================= -->
-<footer class="methodical">
+<footer class="methodical" id="metodika">
   <div class="methodical-inner">
     <h2>Методическое сопровождение</h2>
 
