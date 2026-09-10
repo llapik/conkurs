@@ -60,6 +60,10 @@
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
+  function motionOff() {
+    return prefersReducedMotion() || !state.settings.motion;
+  }
+
   function showToast(message, iconName) {
     const region = document.getElementById('toast-region');
     const el = document.createElement('div');
@@ -96,7 +100,7 @@
   resizeConfettiCanvas();
 
   function fireConfetti() {
-    if (prefersReducedMotion()) return;
+    if (motionOff()) return;
     const colors = ['#55d6ff', '#48ffc0', '#b892ff', '#ff8fd6', '#ffd479'];
     const count = 120;
     for (let i = 0; i < count; i++) {
@@ -384,7 +388,7 @@
     renderCurrentView();
     const root = document.getElementById('view-root');
     root.focus({ preventScroll: true });
-    root.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    root.scrollIntoView({ behavior: motionOff() ? 'auto' : 'smooth', block: 'start' });
   }
 
   function enterCourse(courseId) {
@@ -394,7 +398,7 @@
     renderCurrentView();
     const root = document.getElementById('view-root');
     root.focus({ preventScroll: true });
-    root.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    root.scrollIntoView({ behavior: motionOff() ? 'auto' : 'smooth', block: 'start' });
   }
 
   function goToView(n) {
@@ -405,7 +409,7 @@
     renderCurrentView();
     const root = document.getElementById('view-root');
     root.focus({ preventScroll: true });
-    root.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    root.scrollIntoView({ behavior: motionOff() ? 'auto' : 'smooth', block: 'start' });
   }
 
   function renderCurrentView() {
@@ -421,6 +425,49 @@
 
   /* ---------------- ХАБ: выбор отдела ---------------- */
 
+  function renderHero() {
+    const totalTheory = COURSE_ORDER.reduce((sum, id) => sum + COURSES[id].level1.cards.length, 0);
+    const totalCases = COURSE_ORDER.reduce((sum, id) => sum + COURSES[id].level2.cases.length, 0);
+    const totalBadges = COURSE_ORDER.length * Object.keys(BADGE_TIERS).length;
+    const demoCase = COURSES.ai.level2.cases[0];
+    const demoCodeHtml = escapeHtml(demoCase.code).replace('let max = 0;', '<span class="deco-bug">let max = 0;</span>');
+
+    return `
+      <section class="hero">
+        <div class="hero-bg-glow" aria-hidden="true"></div>
+        <div class="hero-grid-plane" data-px="0.12" aria-hidden="true"><div class="hero-grid-plane-inner"></div></div>
+
+        <div class="hero-deco-wrap hero-deco-code-pos" data-px="0.34" aria-hidden="true">
+          <div class="deco-code-card">
+            <div class="deco-code-topbar"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="deco-code-filename">findMax.js</span></div>
+            <pre class="deco-code-pre">${demoCodeHtml}</pre>
+            <div class="deco-code-fail">${icon('alert-triangle')} [-5,-2,-9] → 0 · провал</div>
+          </div>
+        </div>
+        <div class="hero-deco-wrap hero-deco-pass-pos" data-px="0.62" aria-hidden="true">
+          <div class="hero-deco-chip hero-deco-chip-pass">${icon('check-circle')} 3/3 теста пройдено</div>
+        </div>
+        <div class="hero-deco-wrap hero-deco-warn-pos" data-px="0.45" aria-hidden="true">
+          <div class="hero-deco-chip hero-deco-chip-warn">${icon('shield')} SQL-инъекция найдена</div>
+        </div>
+
+        <div class="hero-inner">
+          <span class="hero-badge"><span class="hero-badge-dot" aria-hidden="true"></span>ЭОР · стажировка в ИТ-компании</span>
+          <h1 class="hero-title">Не верь ИИ<br><span class="hero-title-grad">на слово.</span></h1>
+          <p class="hero-sub">Студент приходит стажёром, получает уровни допуска и уходит специалистом, который умеет проверять то, что предложил ИИ. Два отдела, три уровня, авто-проверка прямо в браузере — без сервера и API-ключей.</p>
+          <div class="hero-actions">
+            <a href="#hub-grid" class="btn btn-primary">Выбрать отдел ${icon('chevron-right')}</a>
+            <a href="#metodika" class="btn btn-ghost">как устроены уровни</a>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat"><div class="hero-stat-num hero-stat-blue">${totalTheory}</div><div class="hero-stat-label">карточек теории</div></div>
+            <div class="hero-stat"><div class="hero-stat-num hero-stat-mint">${totalCases}</div><div class="hero-stat-label">кейсов с багами</div></div>
+            <div class="hero-stat"><div class="hero-stat-num hero-stat-violet">${totalBadges}</div><div class="hero-stat-label">бейджей допуска</div></div>
+          </div>
+        </div>
+      </section>`;
+  }
+
   function renderHub() {
     const cardsHtml = COURSE_ORDER.map(courseId => {
       const def = COURSES[courseId];
@@ -429,7 +476,7 @@
       const started = percent > 0 || cs.badges.length > 0;
       const earnedCount = cs.badges.length;
       return `
-        <article class="hub-card glass">
+        <article class="hub-card glass" data-tilt>
           <div class="card-icon-badge hub-card-icon">${icon(def.meta.icon)}</div>
           <div class="hub-card-eyebrow">${escapeHtml(def.meta.dept)}</div>
           <h3>${escapeHtml(def.meta.title)}</h3>
@@ -445,7 +492,8 @@
     }).join('');
 
     return `
-      <section class="view-header">
+      ${renderHero()}
+      <section class="view-header" id="hub-grid">
         <span class="view-eyebrow">CodeCraft Inc.</span>
         <h1>Выберите отдел стажировки</h1>
         <p>Один движок, разные дисциплины: уровни допуска, бейджи и авто-проверка работают одинаково — контент разный. Прогресс по каждому отделу сохраняется отдельно.</p>
@@ -717,7 +765,7 @@
     renderCurrentView();
 
     if (result.pass && !wasSolved) {
-      if (!prefersReducedMotion()) fireConfetti();
+      if (!motionOff()) fireConfetti();
       showToast('Кейс «' + def.title + '» исправлен!', 'check-circle');
       maybeFinishLevel2();
     }
@@ -914,7 +962,7 @@
   /* ---------------- Приветственная типографика (typewriter) ---------------- */
 
   function typeWriter(el, text, speed, done) {
-    if (prefersReducedMotion()) {
+    if (motionOff()) {
       el.textContent = text;
       if (done) done();
       return;
@@ -931,12 +979,44 @@
     }, speed);
   }
 
+  /* ---------------- Параллакс и прогресс прокрутки ---------------- */
+
+  const parallaxMouse = { x: 0, y: 0 };
+  window.addEventListener('mousemove', e => {
+    parallaxMouse.x = (e.clientX / window.innerWidth - 0.5) * 2;
+    parallaxMouse.y = (e.clientY / window.innerHeight - 0.5) * 2;
+  }, { passive: true });
+
+  function tickParallax() {
+    const docHeight = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const bar = document.getElementById('scroll-progress');
+    if (bar) bar.style.width = Math.min(100, (window.scrollY / docHeight) * 100).toFixed(2) + '%';
+
+    const on = !motionOff();
+    document.querySelectorAll('[data-px]').forEach(el => {
+      if (!on) { el.style.transform = ''; return; }
+      const sp = parseFloat(el.dataset.px) || 0;
+      const box = el.getBoundingClientRect();
+      const rel = (box.top + box.height / 2 - window.innerHeight / 2) / window.innerHeight;
+      const mx = parallaxMouse.x * sp * 16;
+      const my = parallaxMouse.y * sp * 12;
+      el.style.transform = 'translate3d(' + mx.toFixed(2) + 'px,' + (-rel * sp * 150 + my).toFixed(2) + 'px,0)';
+    });
+    requestAnimationFrame(tickParallax);
+  }
+
   /* ---------------- Инициализация и обработчики ---------------- */
 
   function applySettings() {
     document.documentElement.style.setProperty('--font-scale', state.settings.fontScale);
     document.documentElement.dataset.contrast = state.settings.highContrast ? 'high' : 'normal';
     document.getElementById('contrast-toggle').setAttribute('aria-pressed', String(state.settings.highContrast));
+
+    document.documentElement.dataset.motion = state.settings.motion ? 'on' : 'off';
+    const motionBtn = document.getElementById('motion-toggle');
+    motionBtn.textContent = state.settings.motion ? '≈' : '≠';
+    motionBtn.setAttribute('aria-pressed', String(!state.settings.motion));
+    motionBtn.setAttribute('aria-label', state.settings.motion ? 'Уменьшить анимацию' : 'Включить анимацию');
 
     const isLight = state.settings.theme === 'light';
     document.documentElement.dataset.theme = state.settings.theme;
@@ -957,6 +1037,10 @@
     });
     document.getElementById('contrast-toggle').addEventListener('click', () => {
       state.settings.highContrast = !state.settings.highContrast;
+      saveState(); applySettings();
+    });
+    document.getElementById('motion-toggle').addEventListener('click', () => {
+      state.settings.motion = !state.settings.motion;
       saveState(); applySettings();
     });
     document.getElementById('theme-toggle').addEventListener('click', () => {
@@ -1030,6 +1114,22 @@
       else if (action === 'rubric-toggle') handleRubricToggle(el.dataset.promptId, el.dataset.rubricIdx);
     });
 
+    root.addEventListener('mousemove', e => {
+      if (motionOff()) return;
+      const card = e.target.closest('[data-tilt]');
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      const dx = (e.clientX - r.left) / r.width - 0.5;
+      const dy = (e.clientY - r.top) / r.height - 0.5;
+      card.style.transform = 'perspective(900px) rotateY(' + (dx * 7).toFixed(2) + 'deg) rotateX(' + (-dy * 7).toFixed(2) + 'deg) translateY(-4px)';
+    });
+
+    root.addEventListener('mouseout', e => {
+      const card = e.target.closest('[data-tilt]');
+      if (!card || card.contains(e.relatedTarget)) return;
+      card.style.transform = '';
+    });
+
     root.addEventListener('input', e => {
       const codeEditor = e.target.closest('textarea.code-editor[data-case-id]');
       if (codeEditor) {
@@ -1052,6 +1152,7 @@
     initDelegatedEvents();
     renderCurrentView();
     updateHeaderWidgets();
+    requestAnimationFrame(tickParallax);
   }
 
   document.addEventListener('DOMContentLoaded', init);
